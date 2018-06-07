@@ -1,6 +1,7 @@
 /*.xlsx
 /*.exe
 /*.7z
-/*.txt
+/*.zip
+/log_errors.txt
 /serviceAccountKey.json
 /serviceAccountKeyMy.json
