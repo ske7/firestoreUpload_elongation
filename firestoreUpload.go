@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,34 +56,86 @@ func readSheetToSliceOfMap(sheet *xlsx.Sheet) (res []map[string]string, err erro
 	return res, nil
 }
 
-func readFromSourceExcel(filename string) (userlines []map[string]string, projectlines []map[string]string, contactlines []map[string]string, err error) {
+func readFromSourceExcel(filename string) (userlines []map[string]string,
+	projectlines []map[string]string,
+	designationlines []map[string]string,
+	measurementrefslines []map[string]string,
+	contactlines []map[string]string, err error) {
+
 	var xlFile *xlsx.File
 
 	xlFile, err = xlsx.OpenFile(filename)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	if len(xlFile.Sheets) == 0 {
-		return nil, nil, nil, errors.New("This XLSX file contains no sheets")
+		return nil, nil, nil, nil, nil, errors.New("This XLSX file contains no sheets")
 	}
 
 	userlines, err = readSheetToSliceOfMap(xlFile.Sheets[0])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	projectlines, err = readSheetToSliceOfMap(xlFile.Sheets[1])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
+	designationlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	return userlines, projectlines, contactlines, nil
+	measurementrefslines, err = readSheetToSliceOfMap(xlFile.Sheets[3])
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[4])
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	return userlines, projectlines, designationlines, measurementrefslines, contactlines, nil
+}
+
+func fileExists(name string) bool {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+func createLofErrorFile() (logFile *os.File) {
+	sdir, err := os.Getwd()
+	if err != nil {
+		panic(fmt.Sprintf("Fatal error in getting start directory: %v\n", err))
+	}
+	if fileExists(sdir + "/log_errors.txt") {
+		logFile, err = os.OpenFile(sdir+"/log_errors.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return logFile
+	}
+	logFile, err = os.Create(sdir + "/log_errors.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return logFile
+}
+
+func doLogError(errStr string) {
+	logFile := createLofErrorFile()
+	defer logFile.Close()
+	log.SetOutput(logFile)
+	fmt.Printf("%v \n", errStr)
+	log.Fatal(errStr)
 }
 
 func main() {
@@ -92,14 +145,16 @@ func main() {
 	} else {
 		xlsxPath = os.Args[1]
 	}
-	log.Printf("Use %q file as data source \n", xlsxPath)
+	fmt.Printf("Use %q file as data source \n", xlsxPath)
 
 	userlines := make([]map[string]string, 0, 0)
 	projectlines := make([]map[string]string, 0, 0)
+	designationlines := make([]map[string]string, 0, 0)
+	measurementrefslines := make([]map[string]string, 0, 0)
 	contactlines := make([]map[string]string, 0, 0)
-	userlines, projectlines, contactlines, err := readFromSourceExcel(xlsxPath)
+	userlines, projectlines, designationlines, measurementrefslines, contactlines, err := readFromSourceExcel(xlsxPath)
 	if err != nil {
-		log.Fatal(err)
+		doLogError(err.Error())
 	}
 
 	opt := option.WithCredentialsFile("serviceAccountKey.json")
@@ -107,11 +162,11 @@ func main() {
 
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		log.Fatalf("Error initializing app: '%v'", err)
+		doLogError(fmt.Sprintf("Error initializing app: '%v'", err))
 	}
 	firestoreClient, err := app.Firestore(ctx)
 	if err != nil {
-		log.Fatalln(err)
+		doLogError(err.Error())
 	}
 	defer firestoreClient.Close()
 
@@ -119,28 +174,28 @@ func main() {
 		fmt.Printf("Create user records:")
 		authClient, err := app.Auth(ctx)
 		if err != nil {
-			log.Fatalf("Error getting Auth client: %v\n", err)
+			doLogError(fmt.Sprintf("Error getting Auth client: %v\n", err))
 		}
 		for _, line := range userlines {
 			u, err := authClient.GetUserByEmail(ctx, line["identifier"])
 			if err != nil {
 				if !strings.Contains(err.Error(), "cannot find user from email") {
-					log.Fatalf("Error getting user by email %s: %v\n", line["identifier"], err)
+					doLogError(fmt.Sprintf("Error getting user by email %s: %v\n", line["identifier"], err))
 				}
 			}
 			if u != nil {
 				continue
 			}
-
+			fmt.Print(".")
 			params := (&auth.UserToCreate{}).
 				Email(line["identifier"]).
 				EmailVerified(false).
-				Password("12345678").
+				Password("~1234@56%7&8xlongxx#Vsa232fshort").
 				Disabled(false)
 
 			UserRecord, err := authClient.CreateUser(ctx, params)
 			if err != nil {
-				log.Fatalf("error creating user: %v\n", err)
+				doLogError(fmt.Sprintf("error creating user: %v\n", err))
 			}
 
 			_, err = firestoreClient.Collection("users").Doc(UserRecord.UID).Set(ctx, map[string]interface{}{
@@ -148,20 +203,19 @@ func main() {
 				"last_name":  line["last_name"],
 				"role":       line["role"],
 			}, firestore.MergeAll)
-
-			fmt.Printf("Successfully created user: %q with uid: %q\n", line["identifier"], UserRecord.UID)
 		}
 	}
 
 	var projectID string
+	prcollname := "project"
 	fmt.Println()
-	fmt.Print("Add project details and cable log:")
-	for _, line := range projectlines {
+	fmt.Print("Add project details and measurments:")
+	for j, line := range projectlines {
 		fmt.Print(".")
 		if line["project_id"] != "" {
 			projectID = line["project_id"]
 			date, _ := time.Parse("01/02/2006", line["start_date"])
-			_, err = firestoreClient.Collection("project1").Doc(projectID).Set(ctx, map[string]interface{}{
+			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Set(ctx, map[string]interface{}{
 				"address_line_1": line["address_line_1"],
 				"address_line_2": line["address_line_2"],
 				"area":           line["area"],
@@ -175,28 +229,82 @@ func main() {
 				"start_date":     date,
 			}, firestore.MergeAll)
 			if err != nil {
-				log.Fatalf("Failed adding %v: %v", line, err)
+				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
 			}
 		}
 
-		// TODO cable log
+		isDouble, _ := strconv.ParseBool(line["is_double"])
+		cableID, _ := strconv.Atoi(line["cable_id"])
+		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
+			Doc(projectID+"-"+"measurement"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
+			"designation": line["designation"],
+			"is_double":   isDouble,
+			"cable_id":    cableID,
+		}, firestore.MergeAll)
+		if err != nil {
+			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
+		}
 	}
+
+	fmt.Println()
+	fmt.Print("Add designations:")
+	for j, line := range designationlines {
+		fmt.Print(".")
+		toleranceMax, _ := strconv.ParseFloat(line["tolerance_max"], 64)
+		toleranceMin, _ := strconv.ParseFloat(line["tolerance_min"], 64)
+		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("designations").
+			Doc(projectID+"-"+"designation"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
+			"name":          line["designation"],
+			"tolerance_max": toleranceMax,
+			"tolerance_min": toleranceMin,
+		}, firestore.MergeAll)
+		if err != nil {
+			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
+		}
+	}
+
+	fmt.Println()
+	fmt.Print("Add measurement-refs:")
+	for j, line := range measurementrefslines {
+		fmt.Print(".")
+		cableID, _ := strconv.Atoi(line["cable_id"])
+		x, _ := strconv.Atoi(line["x"])
+		y, _ := strconv.Atoi(line["y"])
+		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurement-refs").
+			Doc(projectID+"-"+"measurement-ref"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
+			"cable_id": cableID,
+			"end_id":   line["end_id"],
+			"order_id": j,
+			"suffix":   line["suffix"],
+			"x":        x,
+			"y":        y,
+		}, firestore.MergeAll)
+		if err != nil {
+			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
+		}
+	}
+
 	fmt.Println()
 	fmt.Print("Add contacts:")
-	for _, line := range contactlines {
+	for j, line := range contactlines {
 		fmt.Print(".")
 		if line["email"] != "" {
-			_, _, err = firestoreClient.Collection("project1").Doc(projectID).Collection("contacts").Add(ctx, map[string]interface{}{
+			status, _ := strconv.Atoi(line["status"])
+			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("contacts").
+				Doc(projectID+"-"+"contact"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
 				"email":  line["email"],
 				"name":   line["name"],
-				"status": line["status"],
+				"status": status,
 			})
 			if err != nil {
-				log.Fatalf("Failed adding %v: %v", line, err)
+				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
 			}
 		}
 	}
 
 	fmt.Println()
-	log.Println("Job done!")
+	fmt.Println("Job done!")
+	fmt.Println("Press the Enter Key to quit!")
+	var input string
+	fmt.Scanln(&input)
 }
