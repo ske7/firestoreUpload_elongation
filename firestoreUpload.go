@@ -58,6 +58,7 @@ func readSheetToSliceOfMap(sheet *xlsx.Sheet) (res []map[string]string, err erro
 
 func readFromSourceExcel(filename string) (userlines []map[string]string,
 	projectlines []map[string]string,
+	measurmentlines []map[string]string,
 	designationlines []map[string]string,
 	measurementrefslines []map[string]string,
 	contactlines []map[string]string, err error) {
@@ -66,39 +67,44 @@ func readFromSourceExcel(filename string) (userlines []map[string]string,
 
 	xlFile, err = xlsx.OpenFile(filename)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
 	if len(xlFile.Sheets) == 0 {
-		return nil, nil, nil, nil, nil, errors.New("This XLSX file contains no sheets")
+		return nil, nil, nil, nil, nil, nil, errors.New("This XLSX file contains no sheets")
 	}
 
 	userlines, err = readSheetToSliceOfMap(xlFile.Sheets[0])
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
 	projectlines, err = readSheetToSliceOfMap(xlFile.Sheets[1])
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	designationlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
+	measurmentlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	measurementrefslines, err = readSheetToSliceOfMap(xlFile.Sheets[3])
+	designationlines, err = readSheetToSliceOfMap(xlFile.Sheets[3])
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[4])
+	measurementrefslines, err = readSheetToSliceOfMap(xlFile.Sheets[4])
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	return userlines, projectlines, designationlines, measurementrefslines, contactlines, nil
+	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[5])
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, err
+	}
+
+	return userlines, projectlines, measurmentlines, designationlines, measurementrefslines, contactlines, nil
 }
 
 func fileExists(name string) bool {
@@ -149,10 +155,11 @@ func main() {
 
 	userlines := make([]map[string]string, 0, 0)
 	projectlines := make([]map[string]string, 0, 0)
+	measurementlines := make([]map[string]string, 0, 0)
 	designationlines := make([]map[string]string, 0, 0)
 	measurementrefslines := make([]map[string]string, 0, 0)
 	contactlines := make([]map[string]string, 0, 0)
-	userlines, projectlines, designationlines, measurementrefslines, contactlines, err := readFromSourceExcel(xlsxPath)
+	userlines, projectlines, measurementlines, designationlines, measurementrefslines, contactlines, err := readFromSourceExcel(xlsxPath)
 	if err != nil {
 		doLogError(err.Error())
 	}
@@ -209,37 +216,52 @@ func main() {
 	var projectID string
 	prcollname := "project"
 	fmt.Println()
-	fmt.Print("Add project details and measurments:")
-	for j, line := range projectlines {
+	fmt.Print("Add project details:")
+	for _, line := range projectlines {
 		fmt.Print(".")
 		if line["project_id"] != "" {
 			projectID = line["project_id"]
 			date, _ := time.Parse("01/02/2006", line["start_date"])
+			area, _ := strconv.Atoi(line["area"])
+			totalcables, _ := strconv.Atoi(line["total_cables"])
 			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Set(ctx, map[string]interface{}{
-				"address_line_1": line["address_line_1"],
-				"address_line_2": line["address_line_2"],
-				"area":           line["area"],
-				"client_name":    line["client_name"],
-				"contact_name":   line["contact_name"],
-				"contact_phone":  line["contact_phone"],
-				"engineer_id":    line["engineer_id"],
-				"field_tech_id":  line["field_tech_id"],
-				"map_image":      line["map_image"],
-				"project_id":     projectID,
-				"start_date":     date,
+				"address_line_1":         line["address_line_1"],
+				"address_line_2":         line["address_line_2"],
+				"area":                   area,
+				"benchmark":              line["benchmark"],
+				"client_name":            line["client_name"],
+				"contact_name":           line["contact_name"],
+				"contact_phone":          line["contact_phone"],
+				"general_location":       line["general_location"],
+				"engineer_id":            line["engineer_id"],
+				"field_tech_id":          line["field_tech_id"],
+				"map_image":              line["map_image"],
+				"name":                   line["name"],
+				"number":                 line["number"],
+				"project_id":             projectID,
+				"sheet":                  line["sheet"],
+				"start_date":             date,
+				"stressing_company_name": line["stressing_company_name"],
+				"stressing_location":     line["stressing_location"],
+				"total_cables":           totalcables,
+				"work_order_number":      line["work_order_number"],
 			}, firestore.MergeAll)
 			if err != nil {
 				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
 			}
 		}
+	}
 
+	fmt.Println()
+	fmt.Print("Add measurments:")
+	for j, line := range measurementlines {
+		fmt.Print(".")
 		isDouble, _ := strconv.ParseBool(line["is_double"])
-		cableID, _ := strconv.Atoi(line["cable_id"])
 		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
 			Doc(projectID+"-"+"measurement"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
 			"designation": line["designation"],
 			"is_double":   isDouble,
-			"cable_id":    cableID,
+			"cable_id":    line["cable_id"],
 		}, firestore.MergeAll)
 		if err != nil {
 			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
@@ -267,12 +289,11 @@ func main() {
 	fmt.Print("Add measurement-refs:")
 	for j, line := range measurementrefslines {
 		fmt.Print(".")
-		cableID, _ := strconv.Atoi(line["cable_id"])
 		x, _ := strconv.Atoi(line["x"])
 		y, _ := strconv.Atoi(line["y"])
 		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurement-refs").
 			Doc(projectID+"-"+"measurement-ref"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
-			"cable_id": cableID,
+			"cable_id": line["cable_id"],
 			"end_id":   line["end_id"],
 			"order_id": j,
 			"suffix":   line["suffix"],
