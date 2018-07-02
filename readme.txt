@@ -14,4 +14,5 @@ Examples: firestoreUpload.exe "project1.xlsx", firestoreUpload.exe "C:\MyFolder\
 What the program do?
 1. If there are rows in the Users sheet the program will check accounts with identifiers and will add new accounts (if they are not exist) as well as add related records in the "Users" collection.
 
-2.The program will check rows in the next 4 sheet and add records to the firestore  collection "Project" and its subcollections (measurements, designations, measurement-refs, contacts)
+2.The program will check rows in the next 3 sheets and add records to the firestore collection "Project" and its subcollections (measurements, designations, measurement-refs, contacts)
+2.1. The measurements, designations, measurement-refs data fills from Manipulate sheet.

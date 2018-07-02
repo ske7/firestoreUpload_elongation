@@ -84,7 +84,7 @@ func readFromSourceExcel(filename string) (userlines []map[string]string,
 		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	measurmentlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
+	measurmentlines, err = readSheetToSliceOfMap(xlFile.Sheets[3])
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, err
 	}
@@ -94,12 +94,12 @@ func readFromSourceExcel(filename string) (userlines []map[string]string,
 		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	measurementrefslines, err = readSheetToSliceOfMap(xlFile.Sheets[4])
+	measurementrefslines, err = readSheetToSliceOfMap(xlFile.Sheets[3])
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[5])
+	contactlines, err = readSheetToSliceOfMap(xlFile.Sheets[2])
 	if err != nil {
 		return nil, nil, nil, nil, nil, nil, err
 	}
@@ -214,6 +214,7 @@ func main() {
 	}
 
 	var projectID string
+	var totalcables int
 	prcollname := "project"
 	fmt.Println()
 	fmt.Print("Add project details:")
@@ -221,30 +222,51 @@ func main() {
 		fmt.Print(".")
 		if line["project_id"] != "" {
 			projectID = line["project_id"]
-			date, _ := time.Parse("01/02/2006", line["start_date"])
+			startdate, _ := time.Parse("01-02-06", line["start_date"])
+			calibrationdate, _ := time.Parse("01-02-06", line["calibration_date"])
+			engineersubmittedat, _ := time.Parse("01-02-06", line["engineer_submitted_at"])
+			fieldstartedat, _ := time.Parse("01-02-06", line["field_started_at"])
+			fieldsubmittedat, _ := time.Parse("01-02-06", line["field_submitted_at"])
 			area, _ := strconv.Atoi(line["area"])
-			totalcables, _ := strconv.Atoi(line["total_cables"])
+			totalcables, _ = strconv.Atoi(line["total_cables"])
+			averagedeviation, _ := strconv.Atoi(line["average_deviation"])
+			status, _ := strconv.Atoi(line["status"])
 			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Set(ctx, map[string]interface{}{
-				"address_line_1":         line["address_line_1"],
-				"address_line_2":         line["address_line_2"],
-				"area":                   area,
-				"benchmark":              line["benchmark"],
-				"client_name":            line["client_name"],
-				"contact_name":           line["contact_name"],
-				"contact_phone":          line["contact_phone"],
-				"general_location":       line["general_location"],
-				"engineer_id":            line["engineer_id"],
-				"field_tech_id":          line["field_tech_id"],
-				"map_image":              line["map_image"],
-				"name":                   line["name"],
-				"number":                 line["number"],
-				"project_id":             projectID,
-				"sheet":                  line["sheet"],
-				"start_date":             date,
-				"stressing_company_name": line["stressing_company_name"],
-				"stressing_location":     line["stressing_location"],
-				"total_cables":           totalcables,
-				"work_order_number":      line["work_order_number"],
+				"address_line_1":           line["address_line_1"],
+				"address_line_2":           line["address_line_2"],
+				"area":                     area,
+				"average_deviation":        averagedeviation,
+				"benchmark":                line["benchmark"],
+				"calibration_date":         calibrationdate,
+				"calibration_psi":          line["calibration_psi"],
+				"client_name":              line["client_name"],
+				"contact_name":             line["contact_name"],
+				"contact_phone":            line["contact_phone"],
+				"device_calibration_image": line["device_calibration_image"],
+				"engineer_id":              line["engineer_id"],
+				"engineer_submitted_at":    engineersubmittedat,
+				"field_started_at":         fieldstartedat,
+				"field_submitted_at":       fieldsubmittedat,
+				"field_tech_id":            line["field_tech_id"],
+				"floor":                    line["floor"],
+				"gauge":                    line["gauge"],
+				"general_location":         line["general_location"],
+				"map_image":                line["map_image"],
+				"name":                     line["name"],
+				"number":                   line["number"],
+				"project_id":               projectID,
+				"pt_specification":         line["pt_specification"],
+				"pump":                     line["pump"],
+				"ram":                      line["ram"],
+				"ram_certification_image": line["ram_certification_image"],
+				"sheet":                   line["sheet"],
+				"start_date":              startdate,
+				"status":                  status,
+				"stressing_company_name":  line["stressing_company_name"],
+				"stressing_location":      line["stressing_location"],
+				"total_cables":            totalcables,
+				"weather":                 line["weather"],
+				"work_order_number":       line["work_order_number"],
 			}, firestore.MergeAll)
 			if err != nil {
 				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
@@ -253,47 +275,68 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Print("Add measurments:")
-	for j, line := range measurementlines {
-		fmt.Print(".")
-		isDouble, _ := strconv.ParseBool(line["is_double"])
-		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
-			Doc(projectID+"-"+"measurement"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
-			"designation": line["designation"],
-			"is_double":   isDouble,
-			"cable_id":    line["cable_id"],
-		}, firestore.MergeAll)
-		if err != nil {
-			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
+	fmt.Print("Add measurements:")
+	k := 0
+	for _, line := range measurementlines {
+		cableorder, _ := strconv.Atoi(line["cable_order"])
+		if cableorder <= totalcables {
+			fmt.Print(".")
+			isDouble, _ := strconv.ParseBool(line["is_double"])
+			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
+				Doc(projectID+"-"+"measurement"+"-"+strconv.Itoa(k+1)).Set(ctx, map[string]interface{}{
+				"designation": line["Set Designation"],
+				"is_double":   isDouble,
+				"cable_id":    line["cable_id"],
+			}, firestore.MergeAll)
+			if err != nil {
+				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
+			}
+			k++
 		}
 	}
 
 	fmt.Println()
 	fmt.Print("Add designations:")
-	for j, line := range designationlines {
-		fmt.Print(".")
+	type designationT struct {
+		name         string
+		toleranceMax float64
+		toleranceMin float64
+	}
+	designationsunique := make(map[designationT]bool, 0)
+	k = 0
+	for _, line := range designationlines {
 		toleranceMax, _ := strconv.ParseFloat(line["tolerance_max"], 64)
 		toleranceMin, _ := strconv.ParseFloat(line["tolerance_min"], 64)
+		_, is := designationsunique[designationT{line["Set Designation"], 0, 0}]
+		if is {
+			continue
+		}
+		fmt.Print(".")
+
 		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("designations").
-			Doc(projectID+"-"+"designation"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
-			"name":          line["designation"],
+			Doc(projectID+"-"+"designation"+"-"+strconv.Itoa(k+1)).Set(ctx, map[string]interface{}{
+			"name":          line["Set Designation"],
 			"tolerance_max": toleranceMax,
 			"tolerance_min": toleranceMin,
 		}, firestore.MergeAll)
 		if err != nil {
 			doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
 		}
+		designationsunique[designationT{line["Set Designation"], 0, 0}] = true
+		k++
 	}
 
 	fmt.Println()
 	fmt.Print("Add measurement-refs:")
 	for j, line := range measurementrefslines {
 		fmt.Print(".")
+		var cableid string
+		cableid = line["cable_id"]
 		x, _ := strconv.Atoi(line["x"])
 		y, _ := strconv.Atoi(line["y"])
 		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurement-refs").
 			Doc(projectID+"-"+"measurement-ref"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
-			"cable_id": line["cable_id"],
+			"cable_id": cableid,
 			"end_id":   line["end_id"],
 			"order_id": j,
 			"suffix":   line["suffix"],
