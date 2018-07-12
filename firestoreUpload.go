@@ -222,11 +222,36 @@ func main() {
 		fmt.Print(".")
 		if line["project_id"] != "" {
 			projectID = line["project_id"]
-			startdate, _ := time.Parse("01-02-06", line["start_date"])
-			calibrationdate, _ := time.Parse("01-02-06", line["calibration_date"])
-			engineersubmittedat, _ := time.Parse("01-02-06", line["engineer_submitted_at"])
-			fieldstartedat, _ := time.Parse("01-02-06", line["field_started_at"])
-			fieldsubmittedat, _ := time.Parse("01-02-06", line["field_submitted_at"])
+			var startdate interface{}
+			if line["start_date"] == "" {
+				startdate = nil
+			} else {
+				startdate, _ = time.Parse("01-02-06", line["start_date"])
+			}
+			var calibrationdate interface{}
+			if line["calibration_date"] == "" {
+				calibrationdate = nil
+			} else {
+				calibrationdate, _ = time.Parse("01-02-06", line["calibration_date"])
+			}
+			var engineersubmittedat interface{}
+			if line["engineer_submitted_at"] == "" {
+				engineersubmittedat = nil
+			} else {
+				engineersubmittedat, _ = time.Parse("01-02-06", line["engineer_submitted_at"])
+			}
+			var fieldstartedat interface{}
+			if line["field_started_at"] == "" {
+				fieldstartedat = nil
+			} else {
+				fieldstartedat, _ = time.Parse("01-02-06", line["field_started_at"])
+			}
+			var fieldsubmittedat interface{}
+			if line["field_submitted_at"] == "" {
+				fieldsubmittedat = nil
+			} else {
+				fieldsubmittedat, _ = time.Parse("01-02-06", line["field_submitted_at"])
+			}
 			area, _ := strconv.Atoi(line["area"])
 			totalcables, _ = strconv.Atoi(line["total_cables"])
 			averagedeviation, _ := strconv.Atoi(line["average_deviation"])
@@ -278,8 +303,8 @@ func main() {
 	fmt.Print("Add measurements:")
 	k := 0
 	for _, line := range measurementlines {
-		cableorder, _ := strconv.Atoi(line["cable_order"])
-		if cableorder <= totalcables {
+		cableorder, _ := strconv.Atoi(line["is_second_end"])
+		if cableorder != 1 {
 			fmt.Print(".")
 			isDouble, _ := strconv.ParseBool(line["is_double"])
 			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
