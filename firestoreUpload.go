@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -142,6 +143,16 @@ func doLogError(errStr string) {
 	log.SetOutput(logFile)
 	fmt.Printf("%v \n", errStr)
 	log.Fatal(errStr)
+}
+
+func roundSpecial(value string) interface{} {
+	var x interface{}
+	x, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		x = value
+		return x
+	}
+	return strconv.FormatFloat(math.Round(x.(float64)*100)/100, 'f', 2, 64)
 }
 
 func main() {
@@ -309,7 +320,7 @@ func main() {
 			isDouble, _ := strconv.ParseBool(line["is_double"])
 			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("measurements").
 				Doc(projectID+"-"+"measurement"+"-"+strconv.Itoa(k+1)).Set(ctx, map[string]interface{}{
-				"designation": line["Set Designation"],
+				"designation": roundSpecial(line["Set Designation"]),
 				"is_double":   isDouble,
 				"cable_id":    line["cable_id"],
 			}, firestore.MergeAll)
@@ -340,7 +351,7 @@ func main() {
 
 		_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("designations").
 			Doc(projectID+"-"+"designation"+"-"+strconv.Itoa(k+1)).Set(ctx, map[string]interface{}{
-			"name":          line["Set Designation"],
+			"name":          roundSpecial(line["Set Designation"]),
 			"tolerance_max": toleranceMax,
 			"tolerance_min": toleranceMin,
 		}, firestore.MergeAll)
@@ -381,9 +392,9 @@ func main() {
 			status, _ := strconv.Atoi(line["status"])
 			_, err = firestoreClient.Collection(prcollname).Doc(projectID).Collection("contacts").
 				Doc(projectID+"-"+"contact"+"-"+strconv.Itoa(j+1)).Set(ctx, map[string]interface{}{
-				"email":  line["email"],
-				"name":   line["name"],
-				"status": status,
+				"email":      line["email"],
+				"name":       line["name"],
+				"statusType": status,
 			})
 			if err != nil {
 				doLogError(fmt.Sprintf("Failed adding %v: %v", line, err))
